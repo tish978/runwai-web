@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { loadStripe } from '@stripe/stripe-js';
 import Login from './components/Login';
+
+// Initialize Stripe with your publishable key (replace with your own)
+const stripePromise = loadStripe('pk_test_51Q7NqdGpfvzWqvI6IstFprvP98VrLTIwcdeDDPI6a1GBn8Gp1eH6Eun72CgjNzVkXiLd4AeSHm1fL5F4iFyFPQlz006ikxdHwU');
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
@@ -8,6 +12,7 @@ function App() {
   const [feedback, setFeedback] = useState(null);
   const [savedItems, setSavedItems] = useState([]);
   const [cartItems, setCartItems] = useState([]); // State to hold cart items
+  const [checkoutStatus, setCheckoutStatus] = useState(null); // Status for Stripe checkout
 
   const fetchRecommendation = async () => {
     if (token) {
@@ -150,6 +155,36 @@ function App() {
     return <Login setToken={setToken} />;
   }
 
+  const handleCheckout = async () => {
+    if (token) {
+      try {
+        const response = await axios.post(
+          'http://127.0.0.1:8000/create-checkout-session',
+          cartItems,  // Send the cart items to the backend
+          { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        );
+  
+        // Redirect to Stripe Checkout
+        const stripe = await stripePromise;
+        const result = await stripe.redirectToCheckout({
+          sessionId: response.data.sessionId,  // Only pass the session ID here
+        });
+  
+        if (result.error) {
+          setCheckoutStatus('Payment failed. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error during checkout:', error);
+        setCheckoutStatus('Payment failed. Please try again.');
+      }
+  
+      // Clear the status after 5 seconds
+      setTimeout(() => {
+        setCheckoutStatus(null);
+      }, 5000);
+    }
+  };
+  
   return (
     <div>
       <h2>Recommendation</h2>
@@ -211,9 +246,17 @@ function App() {
               <button onClick={() => removeFromCart(item.clothing_id)}>Remove from Cart</button>
             </div>
           ))}
+          <button onClick={handleCheckout}>Checkout</button> {/* Checkout button */}
         </div>
       ) : (
         <p>No items in cart.</p>
+      )}
+
+      {/* Display checkout status message */}
+      {checkoutStatus && (
+        <div>
+          <p>{checkoutStatus}</p>
+        </div>
       )}
     </div>
   );
